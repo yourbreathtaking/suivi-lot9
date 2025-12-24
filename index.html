@@ -12,6 +12,8 @@
         .animate-in { animation: fadeIn 0.2s ease-out forwards; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         textarea { resize: none; }
+        .custom-task-item { animation: slideIn 0.2s ease-out; }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900 pb-10">
@@ -22,7 +24,6 @@
         </div>
     </div>
 
-    <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { 
@@ -36,27 +37,28 @@
             query 
         } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-        // 🔴 REPLACE WITH YOUR FIREBASE CONFIG
-            const firebaseConfig = {
-        apiKey: "AIzaSyCwWW_-3rNSheLhfUNaFkinvDcBzEDukZI",
-        authDomain: "lot-9-aabb8.firebaseapp.com",
-        projectId: "lot-9-aabb8",
-        storageBucket: "lot-9-aabb8.firebasestorage.app",
-        messagingSenderId: "925973962540",
-        appId: "1:925973962540:web:15df13581069d66af61689",
-        measurementId: "G-BV9D48M6Z0"
-};
+        const firebaseConfig = {
+            apiKey: "AIzaSyCwWW_-3rNSheLhfUNaFkinvDcBzEDukZI",
+            authDomain: "lot-9-aabb8.firebaseapp.com",
+            projectId: "lot-9-aabb8",
+            storageBucket: "lot-9-aabb8.firebasestorage.app",
+            messagingSenderId: "925973962540",
+            appId: "1:925973962540:web:15df13581069d66af61689",
+            measurementId: "G-BV9D48M6Z0"
+        };
         
-        // INIT
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // STATE
         let state = {
             piers: [],
             currentView: 'dashboard',
             selectedViaduct: null,
-            selectedPierId: null
+            selectedPierId: null,
+            isCustomMode: false,
+            customTasks: [
+                { id: Date.now(), label: 'Ferraillage', type: 'individual' }
+            ]
         };
 
         const VIADUCS = [
@@ -73,48 +75,45 @@
             { key: 'fond_fouille', label: 'Fond de Fouille', type: 'individual' }
         ];
 
-        // SYNC - Real-time listener
         function startSync() {
-            try {
-                const piersRef = collection(db, 'viaduc_piers');
-                onSnapshot(piersRef, (snapshot) => {
-                    state.piers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    render();
-                }, (error) => {
-                    console.error("Sync Error:", error);
-                    showError("Erreur de synchronisation. Vérifiez vos règles Firestore.");
-                });
-            } catch (error) {
-                console.error("Init Error:", error);
-                showError("Configuration Firebase incorrecte. Vérifiez votre config.");
-            }
+            onSnapshot(collection(db, 'viaduc_piers'), (snapshot) => {
+                state.piers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                render();
+            }, (error) => showError("Erreur de synchronisation Firestore."));
         }
 
         function showError(message) {
-            document.getElementById('app').innerHTML = `
-                <div class="flex h-screen items-center justify-center p-4">
-                    <div class="bg-red-50 text-red-600 p-6 rounded-xl max-w-md">
-                        <div class="font-bold mb-2 flex items-center">
-                            <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
-                            </svg>
-                            Erreur Firebase
-                        </div>
-                        <p class="text-sm mb-4">${message}</p>
-                        <details class="text-xs bg-red-100 p-2 rounded">
-                            <summary class="cursor-pointer font-bold">Checklist de dépannage</summary>
-                            <ul class="mt-2 space-y-1 list-disc list-inside">
-                                <li>Config Firebase correcte?</li>
-                                <li>Règles Firestore: <code>allow read, write: if true;</code></li>
-                                <li>Collection nommée "viaduc_piers"</li>
-                            </ul>
-                        </details>
-                    </div>
-                </div>
-            `;
+            document.getElementById('app').innerHTML = `<div class="p-10 text-red-500 font-bold">${message}</div>`;
         }
 
-        // ACTIONS
+        // --- GESTION DES TÂCHES PERSONNALISÉES ---
+        window.toggleCustomMode = () => {
+            state.isCustomMode = !state.isCustomMode;
+            render();
+        };
+
+        window.addCustomTaskField = () => {
+            state.customTasks.push({ id: Date.now(), label: '', type: 'individual' });
+            render();
+        };
+
+        window.removeCustomTaskField = (id) => {
+            state.customTasks = state.customTasks.filter(t => t.id !== id);
+            render();
+        };
+
+        window.updateCustomTaskLabel = (id, val) => {
+            const task = state.customTasks.find(t => t.id === id);
+            if(task) task.label = val;
+        };
+
+        window.updateCustomTaskType = (id, val) => {
+            const task = state.customTasks.find(t => t.id === id);
+            if(task) task.type = val;
+            render();
+        };
+
+        // --- ACTIONS ---
         window.navigate = (view) => { state.currentView = view; render(); };
         window.goBack = () => { 
             if(state.currentView === 'pier') window.navigate('viaduct');
@@ -136,11 +135,18 @@
             const count = parseInt(document.getElementById('pileCount').value) || 4;
             if(!name) return alert("Nom requis");
 
+            let tasks = DEFAULT_TASK_DEFS;
+            if(state.isCustomMode) {
+                tasks = state.customTasks
+                    .filter(t => t.label.trim() !== '')
+                    .map((t, i) => ({ key: `custom_${i}_${Date.now()}`, label: t.label, type: t.type }));
+                if(tasks.length === 0) return alert("Ajoutez au moins une tâche valide");
+            }
+
             const newId = `${state.selectedViaduct.id}_${Date.now()}`;
-            
             const piles = Array.from({length: count}, (_, i) => {
                 const obj = { id: i + 1 };
-                DEFAULT_TASK_DEFS.forEach(d => obj[d.key] = false);
+                tasks.forEach(d => obj[d.key] = false);
                 return obj;
             });
 
@@ -149,62 +155,46 @@
                     viaductId: state.selectedViaduct.id,
                     name,
                     observations: '',
-                    taskDefinitions: DEFAULT_TASK_DEFS,
+                    taskDefinitions: tasks,
                     piles: piles,
-                    createdAt: Date.now()
+                    createdAt: Date.now(),
+                    isCustom: state.isCustomMode
                 });
-                document.getElementById('pierName').value = '';
+                state.isCustomMode = false;
+                state.customTasks = [{ id: Date.now(), label: '', type: 'individual' }];
             } catch (error) {
-                console.error("Create error:", error);
                 alert("Erreur: " + error.message);
             }
         };
 
         window.updateObservations = async (id, val) => {
-            try {
-                await updateDoc(doc(db, 'viaduc_piers', id), { observations: val });
-            } catch (error) {
-                console.error("Update error:", error);
-            }
+            await updateDoc(doc(db, 'viaduc_piers', id), { observations: val });
         };
 
         window.toggleTask = async (pierId, pileIdx, taskKey) => {
             const pier = state.piers.find(p => p.id === pierId);
             const updatedPiles = [...pier.piles];
             updatedPiles[pileIdx][taskKey] = !updatedPiles[pileIdx][taskKey];
-            try {
-                await updateDoc(doc(db, 'viaduc_piers', pierId), { piles: updatedPiles });
-            } catch (error) {
-                console.error("Toggle error:", error);
-            }
+            await updateDoc(doc(db, 'viaduc_piers', pierId), { piles: updatedPiles });
         };
 
         window.toggleBatch = async (pierId, taskKey, val) => {
             const pier = state.piers.find(p => p.id === pierId);
             const updatedPiles = pier.piles.map(p => ({...p, [taskKey]: val}));
-            try {
-                await updateDoc(doc(db, 'viaduc_piers', pierId), { piles: updatedPiles });
-            } catch (error) {
-                console.error("Batch toggle error:", error);
-            }
+            await updateDoc(doc(db, 'viaduc_piers', pierId), { piles: updatedPiles });
         };
 
         window.deletePier = async (id) => {
             if(confirm("Supprimer cette pile définitivement ?")) {
-                try {
-                    await deleteDoc(doc(db, 'viaduc_piers', id));
-                    window.goBack();
-                } catch (error) {
-                    console.error("Delete error:", error);
-                }
+                await deleteDoc(doc(db, 'viaduc_piers', id));
+                window.goBack();
             }
         };
 
-        // RENDERING
+        // --- RENDERING ---
         function render() {
             const root = document.getElementById('app');
             let content = '';
-
             switch(state.currentView) {
                 case 'dashboard': content = renderDashboard(); break;
                 case 'viaduct': content = renderViaductView(); break;
@@ -222,7 +212,7 @@
                             <button onclick="goBack()" class="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors">
                                 <i data-lucide="arrow-left" class="mr-1 w-4 h-4"></i> Retour
                             </button>
-                        ` : '<div class="text-[10px] bg-green-50 text-green-600 px-2 py-1 rounded-full font-bold">✓ CONNECTÉ</div>'}
+                        ` : '<div class="text-[10px] bg-green-50 text-green-600 px-2 py-1 rounded-full font-bold uppercase tracking-tighter">✓ Cloud Live</div>'}
                     </div>
                 </header>
                 <main class="max-w-4xl mx-auto px-4 py-6">${content}</main>
@@ -239,7 +229,7 @@
                             <div onclick="selectViaduct('${v.id}')" class="bg-white rounded-2xl p-5 border border-slate-200 hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group">
                                 <div class="flex justify-between items-start mb-4">
                                     <div class="p-2 rounded-xl ${v.bg} ${v.text} transition-transform group-hover:scale-110"><i data-lucide="map-pin"></i></div>
-                                    <span class="text-[10px] font-bold px-2 py-1 rounded-full ${stats.remaining > 0 ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600'}">
+                                    <span class="text-[10px] font-bold px-2 py-1 rounded-full ${stats.remaining > 0 ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600'} uppercase">
                                         ${stats.remaining > 0 ? `${stats.remaining} tâches` : 'Terminé'}
                                     </span>
                                 </div>
@@ -260,34 +250,69 @@
             return `
                 <div class="space-y-6 animate-in">
                     <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                        <h3 class="font-bold text-lg mb-4">Ajouter une Pile</h3>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                            <input id="pierName" type="text" placeholder="Nom (ex: P1)" class="p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-slate-900 outline-none">
-                            <input id="pileCount" type="number" value="4" min="1" max="20" class="p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold">
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="font-bold text-lg">Nouvelle Pile</h3>
+                            <button onclick="toggleCustomMode()" class="text-[10px] font-bold px-3 py-1.5 rounded-lg border transition-all ${state.isCustomMode ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-200 text-slate-500'}">
+                                ⚙️ MODE ${state.isCustomMode ? 'PERSONNALISÉ' : 'STANDARD'}
+                            </button>
                         </div>
+                        
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold text-slate-400 ml-1 uppercase">Nom de la pile</label>
+                                <input id="pierName" type="text" placeholder="ex: P1" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:bg-white focus:ring-2 focus:ring-slate-900 transition-all">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold text-slate-400 ml-1 uppercase">Nombre de pieux</label>
+                                <input id="pileCount" type="number" value="4" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:bg-white transition-all">
+                            </div>
+                        </div>
+
+                        ${state.isCustomMode ? `
+                            <div class="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 mb-6 space-y-3">
+                                <div class="flex justify-between items-center mb-2">
+                                    <span class="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Configuration des tâches</span>
+                                    <button onclick="addCustomTaskField()" class="text-xs font-bold text-indigo-700 hover:underline">+ Ajouter</button>
+                                </div>
+                                <div id="customTasksList" class="space-y-2">
+                                    ${state.customTasks.map(t => `
+                                        <div class="flex gap-2 custom-task-item">
+                                            <input type="text" value="${t.label}" oninput="updateCustomTaskLabel(${t.id}, this.value)" placeholder="Nom de la tâche" class="flex-1 p-2 bg-white border border-indigo-100 rounded-lg text-xs font-bold outline-none focus:border-indigo-500">
+                                            <select onchange="updateCustomTaskType(${t.id}, this.value)" class="p-2 bg-white border border-indigo-100 rounded-lg text-[10px] font-bold outline-none">
+                                                <option value="individual" ${t.type === 'individual' ? 'selected' : ''}>Pieu</option>
+                                                <option value="batch" ${t.type === 'batch' ? 'selected' : ''}>Pile</option>
+                                            </select>
+                                            <button onclick="removeCustomTaskField(${t.id})" class="text-red-300 hover:text-red-500 px-1"><i data-lucide="x" class="w-4 h-4"></i></button>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+
                         <button onclick="createNewPier()" class="w-full bg-slate-900 text-white font-bold rounded-xl py-3 shadow-lg shadow-slate-200 active:scale-95 transition-all">
-                            Créer sur le Cloud
+                            Enregistrer sur le Cloud
                         </button>
                     </div>
 
                     <div class="grid grid-cols-1 gap-2">
-                        ${viPiers.length === 0 ? `
-                            <div class="bg-slate-50 rounded-xl p-8 text-center text-slate-400">
-                                <i data-lucide="inbox" class="mx-auto mb-2 w-8 h-8"></i>
-                                <p class="text-sm font-bold">Aucune pile enregistrée</p>
-                            </div>
-                        ` : viPiers.map(p => {
+                        <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1">Piles dans ${state.selectedViaduct.name}</h4>
+                        ${viPiers.length === 0 ? `<div class="p-8 text-center text-slate-300 text-sm font-medium">Aucune pile enregistrée</div>` : viPiers.map(p => {
                             const s = getPierStats(p);
                             return `
                                 <div onclick="selectPier('${p.id}')" class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between cursor-pointer hover:border-slate-300 transition-all">
                                     <div class="flex items-center space-x-3">
-                                        <div class="h-10 w-10 bg-slate-900 text-white rounded-lg flex items-center justify-center font-bold">${p.name}</div>
-                                        <div class="font-bold">Pile ${p.name}</div>
+                                        <div class="h-10 w-10 bg-slate-900 text-white rounded-lg flex items-center justify-center font-bold text-xs">${p.name}</div>
+                                        <div>
+                                            <div class="font-bold text-sm text-slate-700">Pile ${p.name}</div>
+                                            <div class="text-[9px] text-slate-300 font-bold uppercase tracking-tighter">${p.isCustom ? 'Perso' : 'Standard'} • ${p.piles.length} pieux</div>
+                                        </div>
                                     </div>
-                                    <div class="flex items-center space-x-4">
-                                        ${p.observations ? '<i data-lucide="message-square" class="w-3 h-3 text-indigo-500"></i>' : ''}
-                                        <span class="text-[10px] font-bold ${s.remaining > 0 ? 'text-amber-500' : 'text-green-500'} uppercase">${s.remaining > 0 ? `${s.remaining} à faire` : 'OK'}</span>
-                                        <i data-lucide="chevron-right" class="text-slate-300 w-4 h-4"></i>
+                                    <div class="flex items-center space-x-3">
+                                        ${p.observations ? '<div class="w-2 h-2 rounded-full bg-indigo-400"></div>' : ''}
+                                        <span class="text-[10px] font-bold ${s.remaining > 0 ? 'text-amber-500 bg-amber-50' : 'text-green-500 bg-green-50'} px-2 py-1 rounded-md uppercase tracking-tighter">
+                                            ${s.remaining > 0 ? `${s.remaining} Reste` : 'OK'}
+                                        </span>
+                                        <i data-lucide="chevron-right" class="text-slate-200 w-4 h-4"></i>
                                     </div>
                                 </div>
                             `;
@@ -300,48 +325,57 @@
         function renderPierDetail() {
             const pier = state.piers.find(p => p.id === state.selectedPierId);
             if (!pier) return "";
+            const defs = pier.taskDefinitions || DEFAULT_TASK_DEFS;
 
             return `
                 <div class="space-y-6 animate-in">
-                    <div class="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200">
-                        <div>
-                            <h2 class="font-bold text-lg leading-none">Pile ${pier.name}</h2>
-                            <span class="text-[10px] text-slate-400 font-bold uppercase">${state.selectedViaduct.name}</span>
+                    <div class="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 bg-slate-50 text-slate-400 rounded-lg flex items-center justify-center font-bold text-xs italic border border-slate-100">#${pier.name}</div>
+                            <div>
+                                <h2 class="font-bold text-lg leading-none">Pile ${pier.name}</h2>
+                                <span class="text-[10px] text-slate-400 font-bold uppercase">${state.selectedViaduct.name}</span>
+                            </div>
                         </div>
-                        <button onclick="deletePier('${pier.id}')" class="text-slate-300 hover:text-red-500 transition-colors p-2"><i data-lucide="trash-2"></i></button>
+                        <button onclick="deletePier('${pier.id}')" class="text-slate-200 hover:text-red-500 transition-colors p-2"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
                     </div>
 
                     <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-                        <div class="bg-slate-50 px-4 py-2 border-b border-slate-200"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Observations</span></div>
+                        <div class="bg-slate-50 px-4 py-2 border-b border-slate-100 flex items-center justify-between">
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Observations chantier</span>
+                            <i data-lucide="message-square" class="w-3 h-3 text-slate-300"></i>
+                        </div>
                         <div class="p-4">
-                            <textarea onchange="updateObservations('${pier.id}', this.value)" class="w-full bg-slate-50 p-3 rounded-xl text-sm border border-slate-100 outline-none focus:border-indigo-300 min-h-[80px]">${pier.observations || ''}</textarea>
+                            <textarea onchange="updateObservations('${pier.id}', this.value)" placeholder="Rien à signaler..." class="w-full bg-slate-50 p-3 rounded-xl text-sm border border-slate-100 outline-none focus:bg-white focus:border-indigo-300 min-h-[80px] transition-all">${pier.observations || ''}</textarea>
                         </div>
                     </div>
 
+                    ${defs.some(t => t.type === 'batch') ? `
                     <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-                        <div class="bg-slate-50 px-4 py-2 border-b border-slate-200"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tâches Globales</span></div>
+                        <div class="bg-slate-50 px-4 py-2 border-b border-slate-100"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tâches Globales (Pile)</span></div>
                         <div class="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            ${pier.taskDefinitions.filter(t => t.type === 'batch').map(t => {
+                            ${defs.filter(t => t.type === 'batch').map(t => {
                                 const isDone = pier.piles.every(p => p[t.key]);
                                 return `
-                                    <button onclick="toggleBatch('${pier.id}', '${t.key}', ${!isDone})" class="flex items-center p-3 rounded-xl border-2 transition-all text-left ${isDone ? 'bg-green-50 border-green-500' : 'bg-white border-slate-100 hover:border-slate-300'}">
-                                        <div class="flex-1 font-bold text-xs">${t.label}</div>
-                                        <i data-lucide="check-circle-2" class="w-5 h-5 ${isDone ? 'text-green-500' : 'text-slate-200'}"></i>
+                                    <button onclick="toggleBatch('${pier.id}', '${t.key}', ${!isDone})" class="flex items-center p-3 rounded-xl border-2 transition-all text-left ${isDone ? 'bg-green-50 border-green-500 shadow-inner' : 'bg-white border-slate-100 hover:border-slate-300'}">
+                                        <div class="flex-1 font-bold text-xs ${isDone ? 'text-green-700' : 'text-slate-600'}">${t.label}</div>
+                                        <i data-lucide="${isDone ? 'check-circle' : 'circle'}" class="w-5 h-5 ${isDone ? 'text-green-500' : 'text-slate-200'}"></i>
                                     </button>
                                 `;
                             }).join('')}
                         </div>
                     </div>
+                    ` : ''}
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         ${pier.piles.map((pile, pIdx) => `
                             <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                                <div class="bg-slate-50 px-4 py-2 font-bold text-[10px] text-slate-500 border-b border-slate-100">PIEU ${pile.id}</div>
-                                <div class="p-3 space-y-1.5">
-                                    ${pier.taskDefinitions.filter(t => t.type === 'individual').map(task => `
-                                        <button onclick="toggleTask('${pier.id}', ${pIdx}, '${task.key}')" class="w-full flex justify-between items-center p-2.5 rounded-lg border transition-all ${pile[task.key] ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-transparent hover:border-slate-200'}">
-                                            <span class="text-[11px] font-bold ${pile[task.key] ? 'text-green-700' : 'text-slate-600'}">${task.label}</span>
-                                            <div class="h-4 w-4 rounded border flex items-center justify-center ${pile[task.key] ? 'bg-green-500 border-green-500 text-white' : 'bg-white border-slate-300'}">
+                                <div class="bg-slate-50 px-4 py-2 font-bold text-[10px] text-slate-400 border-b border-slate-100 uppercase tracking-tighter">Pieu ${pile.id}</div>
+                                <div class="p-3 space-y-2">
+                                    ${defs.filter(t => t.type === 'individual').map(task => `
+                                        <button onclick="toggleTask('${pier.id}', ${pIdx}, '${task.key}')" class="w-full flex justify-between items-center p-3 rounded-xl border transition-all ${pile[task.key] ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-transparent hover:border-slate-200'}">
+                                            <span class="text-[11px] font-bold ${pile[task.key] ? 'text-green-700' : 'text-slate-500'}">${task.label}</span>
+                                            <div class="h-5 w-5 rounded-lg border-2 flex items-center justify-center ${pile[task.key] ? 'bg-green-500 border-green-500 text-white' : 'bg-white border-slate-200'}">
                                                 ${pile[task.key] ? '<i data-lucide="check" class="w-3 h-3"></i>' : ''}
                                             </div>
                                         </button>
@@ -355,7 +389,8 @@
         }
 
         function getPierStats(pier) {
-            const ind = pier.taskDefinitions.filter(t => t.type === 'individual');
+            const defs = pier.taskDefinitions || DEFAULT_TASK_DEFS;
+            const ind = defs.filter(t => t.type === 'individual');
             const total = pier.piles.length * ind.length;
             let done = 0;
             pier.piles.forEach(p => ind.forEach(t => { if(p[t.key]) done++; }));
@@ -370,9 +405,7 @@
             return { progress, remaining: rem, count: viPiers.length };
         }
 
-        // START
         startSync();
     </script>
-
 </body>
 </html>
